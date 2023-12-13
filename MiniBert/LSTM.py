@@ -1,8 +1,6 @@
 import torch
-from sklearn.model_selection import train_test_split
 import pandas as pd
 import numpy as np
-import keras
 device = torch.device('cuda')
 MAX_SENTENCE_LEN = 512
 
@@ -17,12 +15,9 @@ class MyLSTM(torch.nn.Module):
 
         self.fc = torch.nn.Linear(dimension, out_size)
 
-    def forward(self, inp):
-        h0 = torch.zeros(self.num_layer,inp.size(0),self.hidden_size).to(device)
-        c0 = torch.zeros(self.num_layer,inp.size(0),self.hidden_size).to(device)
-
-        out, _ = self.lstm(inp, (h0, c0))
-        out = self.fc(out[:, -1, :])
+    def forward(self, sentence):
+        out,_ = self.lstm(sentence)
+        out = self.fc(out)
         return out
 
 
@@ -85,7 +80,7 @@ films = pd.read_csv("../datasets/filmtv_movies.csv")
 dict_vocab = create_vocab_and_sentences_and_answers(films[:2000])[0]
 sentences = create_vocab_and_sentences_and_answers(films[:2000])[1]
 answers = create_vocab_and_sentences_and_answers(films[:2000])[2]
-print(dict_vocab)
+
 
 tokenize_sentences = tokenize(sentences,dict_vocab)
 tokenize_answers = tokenize(answers,dict_vocab)
@@ -94,20 +89,35 @@ for i in range(2000):
     tokenize_sentences[i] = semantic_sense(tokenize_sentences[i],tokenize_sentences)
     tokenize_sentences[i] = soft_max(tokenize_sentences[i])
     tokenize_answers[i] = soft_max(tokenize_answers[i])
+train_data = []
+for i in range(2000):
+    train_data.append((tokenize_sentences[i], tokenize_answers[i]))
 criterion = torch.nn.MSELoss()
 dimension = 512
-hide_size = 5
-num_layers = 512
+hide_size = 512
+num_layers = 5
 out_size = 10
 bidirectional = True
 model = MyLSTM(dimension,hide_size,num_layers,out_size,bidirectional)
-num_epoch = 100
+num_epoch = 30
 loss = torch.nn.CrossEntropyLoss() #CEloss = -sum(target[i] * log(prediction[i]) or BCELoss = -1/N * sum(target[i] * log(prediction[i] + (1-target[i])log(1-prediction[i]))
 optimizer = torch.optim.Adam(model.parameters())
+#train process
 for epoch in range(num_epoch):
-    for X,y in tokenize_sentences, tokenize_answers:
+    for description, answer in train_data[:1600]:
         optimizer.zero_grad()
-        y_prediction = model(X.unsqueeze(-1))
-        loss = loss(y_prediction.squeeze(),y)
+        y_prediction = model(description)
+        loss = loss(y_prediction.squeeze(),answer)
         loss.backward()
         optimizer.step()
+#train = false
+#model.eval()
+#evulation results
+with torch.zero_grad():
+    for description, answer in train_data[1601:1999]:
+        y_prediction = model(description)
+        print(y_prediction)
+
+input_description= soft_max(tokenize(str(input()), dict_vocab))
+prediction = model(input_description)
+print(prediction)
