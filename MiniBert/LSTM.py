@@ -107,7 +107,7 @@ for epoch in range(num_epoch):
     for description, answer in train_data[:1600]:
         optimizer.zero_grad()
         y_prediction = model(description)
-        loss = loss(y_prediction.squeeze(),answer)
+        loss = loss(y_prediction,answer)
         loss.backward()
         optimizer.step()
 #train = false
