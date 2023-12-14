@@ -1,9 +1,8 @@
 import torch
 import pandas as pd
 import numpy as np
-device = torch.device('cuda')
+from torch.utils.data import TensorDataset, DataLoader
 MAX_SENTENCE_LEN = 512
-
 class MyLSTM(torch.nn.Module):
     def __init__(self,dimension, hidden_size, num_layers,out_size,bidirectional):
         super(MyLSTM,self).__init__()
@@ -11,14 +10,15 @@ class MyLSTM(torch.nn.Module):
         self.hidden_size = hidden_size
         self.num_layer = num_layers
         self.bidirectional = bidirectional
-        self.lstm = torch.nn.LSTM(dimension, hidden_size, num_layers, bidirectional= bidirectional )
+        self.lstm = torch.nn.LSTM(dimension, hidden_size, num_layers,batch_first=True)
 
-        self.fc = torch.nn.Linear(dimension, out_size)
+        self.fc = torch.nn.Linear(hidden_size, out_size,dtype=torch.float32)
 
     def forward(self, sentence):
-        out,_ = self.lstm(sentence)
-        out = self.fc(out)
-        return out
+        out, _ = self.lstm(sentence.view(len(sentence),1,-1))
+        tag_space = self.fc(out.view(len(sentence),-1))
+        tag_score = torch.nn.functional.log_softmax(tag_space,dim = 1)
+        return tag_score
 
 
 def semantic_sense(first_vector,all_vector):
@@ -74,7 +74,6 @@ def create_vocab_and_sentences_and_answers(input_sentences):
     return dict_vocab, sentences, answers
 
 
-imdb = pd.read_csv("../datasets/imdb.csv")
 films = pd.read_csv("../datasets/filmtv_movies.csv")
 # tokenize sentences by words
 dict_vocab = create_vocab_and_sentences_and_answers(films[:2000])[0]
@@ -89,35 +88,40 @@ for i in range(2000):
     tokenize_sentences[i] = semantic_sense(tokenize_sentences[i],tokenize_sentences)
     tokenize_sentences[i] = soft_max(tokenize_sentences[i])
     tokenize_answers[i] = soft_max(tokenize_answers[i])
-train_data = []
-for i in range(2000):
-    train_data.append((tokenize_sentences[i], tokenize_answers[i]))
-criterion = torch.nn.MSELoss()
+
+dataset = TensorDataset(torch.tensor(tokenize_sentences, dtype=torch.float32),torch.tensor(tokenize_answers, dtype=torch.float32))
+train_size = int(0.9*len(dataset))
+test_size = len(dataset) - train_size
+
+train_dataset, test_dataset = torch.utils.data.random_split(dataset,[train_size,test_size])
+train_loader = DataLoader(train_dataset)
+test_loader = DataLoader(test_dataset)
 dimension = 512
 hide_size = 512
-num_layers = 5
-out_size = 10
+num_layers = 10
+out_size = 512
 bidirectional = True
 model = MyLSTM(dimension,hide_size,num_layers,out_size,bidirectional)
 num_epoch = 30
 loss = torch.nn.CrossEntropyLoss() #CEloss = -sum(target[i] * log(prediction[i]) or BCELoss = -1/N * sum(target[i] * log(prediction[i] + (1-target[i])log(1-prediction[i]))
 optimizer = torch.optim.Adam(model.parameters())
+#print(model)
 #train process
 for epoch in range(num_epoch):
-    for description, answer in train_data[:1600]:
+    for description,answer in train_loader:
         optimizer.zero_grad()
         y_prediction = model(description)
-        loss = loss(y_prediction,answer)
-        loss.backward()
+        _loss = loss(y_prediction, answer)
+        _loss.backward()
         optimizer.step()
 #train = false
 #model.eval()
 #evulation results
-with torch.zero_grad():
-    for description, answer in train_data[1601:1999]:
-        y_prediction = model(description)
-        print(y_prediction)
+#with torch.zero_grad():
+   # for description, answer in train_data[1601:1999]:
+    #    y_prediction = model(description)
+    #    print(y_prediction)
 
-input_description= soft_max(tokenize(str(input()), dict_vocab))
-prediction = model(input_description)
-print(prediction)
+#input_description= soft_max(tokenize(str(input()), dict_vocab))
+#prediction = model(input_description)
+#print(prediction)
