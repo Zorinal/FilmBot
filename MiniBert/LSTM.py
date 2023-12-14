@@ -2,23 +2,22 @@ import torch
 import pandas as pd
 import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
-MAX_SENTENCE_LEN = 512
-device = torch.device('cuda')
+
+#device = torch.device('cuda')
 class MyLSTM(torch.nn.Module):
-    def __init__(self,dimension, hidden_size, num_layers,out_size,bidirectional):
+    def __init__(self,dimension, hidden_size, num_layers,out_size):
         super(MyLSTM,self).__init__()
         self.dimension = dimension
         self.hidden_size = hidden_size
         self.num_layer = num_layers
-        self.bidirectional = bidirectional
-        self.lstm = torch.nn.LSTM(dimension, hidden_size, num_layers,batch_first=True)
+        self.lstm = torch.nn.LSTM(dimension, hidden_size, num_layers)
 
         self.fc = torch.nn.Linear(hidden_size, out_size,dtype=torch.float32)
 
     def forward(self, sentence):
         out, _ = self.lstm(sentence.view(len(sentence),1,-1))
         tag_space = self.fc(out.view(len(sentence),-1))
-        tag_score = torch.nn.functional.log_softmax(tag_space,dim = 1)
+        tag_score = torch.nn.functional.sigmoid(tag_space)
         return tag_score
 
 
@@ -32,7 +31,7 @@ def semantic_sense(first_vector,all_vector):
     return first_vector
 
 
-def soft_max(input_vector: np.array):
+def soft_max(input_vector):
     sum_vector = sum(input_vector)
     for i in range(len(input_vector)):
         if sum_vector != 0:
@@ -41,16 +40,17 @@ def soft_max(input_vector: np.array):
 
 
 def tokenize(input_sentences, dict_vocab):
-    tokenize_sentences = np.zeros([MAX_SENTENCE_LEN])
+    MAX_SENTENCE_LEN = len(dict_vocab)
+    out_tokenize_sentences = np.zeros([MAX_SENTENCE_LEN])
     for i in range(len(input_sentences)):
         temp_sent = input_sentences[i].split()
         temp_tokenize_sentences = np.zeros([MAX_SENTENCE_LEN])
-        for word in range(len(temp_sent)):
-            temp_val = dict_vocab[temp_sent[word].lower()]
-            np.put(temp_tokenize_sentences, (0, word), temp_val)
-        tokenize_sentences = np.vstack((tokenize_sentences, temp_tokenize_sentences))
-    tokenize_sentences = np.delete(tokenize_sentences, 0, axis=0)
-    return tokenize_sentences
+        for word_ind in range(len(temp_sent)):
+            key = [k for k,v in dict_vocab.items() if v == temp_sent[word_ind]]
+            np.put(temp_tokenize_sentences, (0, word_ind), key)
+        out_tokenize_sentences = np.vstack((out_tokenize_sentences, temp_tokenize_sentences))
+    out_tokenize_sentences = np.delete(out_tokenize_sentences, 0, axis=0)
+    return out_tokenize_sentences
 
 
 def create_vocab_and_sentences_and_answers(input_sentences):
@@ -68,25 +68,23 @@ def create_vocab_and_sentences_and_answers(input_sentences):
 
     vocab = list(set(vocab))
     dict_vocab = {}
-
     for i in range(len(vocab)):
-        dict_vocab.update({vocab[i].lower(): i + 1})
+        dict_vocab.update({i+1:vocab[i].lower()})
 
     return dict_vocab, sentences, answers
 
 
 films = pd.read_csv("../datasets/filmtv_movies.csv")
 # tokenize sentences by words
-dict_vocab = create_vocab_and_sentences_and_answers(films[:2000])[0]
-sentences = create_vocab_and_sentences_and_answers(films[:2000])[1]
-answers = create_vocab_and_sentences_and_answers(films[:2000])[2]
+dict_vocab = create_vocab_and_sentences_and_answers(films[:10])[0]
+sentences = create_vocab_and_sentences_and_answers(films[:10])[1]
+answers = create_vocab_and_sentences_and_answers(films[:10])[2]
 
 
 tokenize_sentences = tokenize(sentences,dict_vocab)
 tokenize_answers = tokenize(answers,dict_vocab)
-
-for i in range(2000):
-    tokenize_sentences[i] = semantic_sense(tokenize_sentences[i],tokenize_sentences)
+for i in range(10):
+    #tokenize_sentences[i] = semantic_sense(tokenize_sentences[i],tokenize_sentences)
     tokenize_sentences[i] = soft_max(tokenize_sentences[i])
     tokenize_answers[i] = soft_max(tokenize_answers[i])
 
@@ -97,17 +95,16 @@ test_size = len(dataset) - train_size
 train_dataset, test_dataset = torch.utils.data.random_split(dataset,[train_size,test_size])
 train_loader = DataLoader(train_dataset)
 test_loader = DataLoader(test_dataset)
-dimension = 512
-hide_size = 512
+dimension = len(dict_vocab)
+hide_size = len(dict_vocab)
 num_layers = 10
-out_size = 512
-bidirectional = True
-model = MyLSTM(dimension,hide_size,num_layers,out_size,bidirectional)
-model = model.to(device)
-num_epoch = 30
+out_size = len(dict_vocab)
+model = MyLSTM(dimension,hide_size,num_layers,out_size)
+#model = model.to(device)
+num_epoch = 20
 loss = torch.nn.CrossEntropyLoss() #CEloss = -sum(target[i] * log(prediction[i]) or BCELoss = -1/N * sum(target[i] * log(prediction[i] + (1-target[i])log(1-prediction[i]))
 optimizer = torch.optim.Adam(model.parameters())
-#print(model)
+print(model)
 #train process
 for epoch in range(num_epoch):
     for description,answer in train_loader:
@@ -117,13 +114,12 @@ for epoch in range(num_epoch):
         _loss.backward()
         optimizer.step()
 #train = false
-#model.eval()
+model.eval()
 #evulation results
-#with torch.zero_grad():
-   # for description, answer in train_data[1601:1999]:
-    #    y_prediction = model(description)
-    #    print(y_prediction)
-
-#input_description= soft_max(tokenize(str(input()), dict_vocab))
+with torch.no_grad():
+    for description, answer in test_loader:
+        y_prediction = model(description)
+        print(y_prediction)
+#input_description= tokenize(str(input()), dict_vocab)
 #prediction = model(input_description)
 #print(prediction)
