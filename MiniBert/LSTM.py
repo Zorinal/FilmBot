@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
 MAX_SENTENCE_LEN = 512
+device = torch.device('cuda')
 class MyLSTM(torch.nn.Module):
     def __init__(self,dimension, hidden_size, num_layers,out_size,bidirectional):
         super(MyLSTM,self).__init__()
@@ -102,6 +103,7 @@ num_layers = 10
 out_size = 512
 bidirectional = True
 model = MyLSTM(dimension,hide_size,num_layers,out_size,bidirectional)
+model = model.to(device)
 num_epoch = 30
 loss = torch.nn.CrossEntropyLoss() #CEloss = -sum(target[i] * log(prediction[i]) or BCELoss = -1/N * sum(target[i] * log(prediction[i] + (1-target[i])log(1-prediction[i]))
 optimizer = torch.optim.Adam(model.parameters())
