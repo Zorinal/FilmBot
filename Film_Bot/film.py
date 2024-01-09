@@ -54,19 +54,30 @@ def count_matching_words(string1, string2):
     return len(matching_words)
 
 
-#print(data.at[1, 'overview'])
-words = gpt2.main(input())
+# print(data.at[1, 'overview'])
+print("Добрый день! Введите ключевые слова, и я посоветую Вам фильм!")
+inp = input()
+words = gpt2.main(inp)
+words = inp + words
+# print(words)
 max_matchings = 0
 best_film = ''
-print(data.shape[0])
+best_film2 = ''
+best_film3 = ''
+# print(data.shape[0])
+print("Вот как gpt продолжил последовательность слов:", words)
 n = 0
 for i in range(data.shape[0]):
     try:
         if max_matchings < count_matching_words(words, data.at[i, 'overview']):
+            best_film3 = best_film2
+            best_film2 = best_film
             best_film = data.at[i, 'title']
             max_matchings = count_matching_words(words, data.at[i, 'overview'])
             n += 1
     except:
         ...
+print("Рекоммендую фильмы:")
 print(best_film)
-# print(gpt2.main("Alan Turing theorized that computers would one day become"))
+print(best_film2)
+print(best_film3)
